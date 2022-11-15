@@ -69,8 +69,26 @@ app.post("/sign-up", async (req, res) => {
 
 })
 
-app.post("/login", async (req, res) => {
+app.post("/sign-in", async (req, res) => {
+    const {email, password} = req.body;
 
+    try {
+        const userExists = await usersCollection.findOne({ email });
+        if(!userExists){
+            return res.sendStatus(401);
+        }
+
+        const passwordValidation = bcrypt.compareSync(password, userExists.password);
+
+        if(!passwordValidation){
+            return res.sendStatus(401);
+        }
+        
+
+    } catch (err) {
+        console.log(err);
+        res.sendStatus(500);
+    }
 });
 
 app.get("/transactions", async (req, res) => {
