@@ -5,7 +5,7 @@ import dotenv from "dotenv";
 import joi from "joi";
 import bcrypt from "bcrypt"
 import { v4 as uuidV4 } from 'uuid';
-
+import dayjs from "dayjs";
 
 // Configs
 const app = express();
@@ -16,6 +16,8 @@ let db;
 let usersCollection;
 let movementsCollection;
 let sessionsCollection;
+const now = dayjs();
+const date = now.format("DD/MM");
 
 // Schemas
 const transactionSchema = joi.object({
@@ -137,9 +139,37 @@ app.get("/transactions", async (req, res) => {
 
 
 
-// app.post("/transactions", async (req, res) => {
+app.post("/transactions", async (req, res) => {
+    const { authorization } = req.headers;
+    const moviment = req.body;
 
-// });
+    const token = authorization?.replace('Bearer ', '');
+
+    if(!token) {
+        return res.sendStatus(401);
+    }
+
+    const { error } = userSchema.validate(moviment, { abortEarly: false });
+
+    if (error) {
+        const errors = error.details.map(detail => detail.message);
+        return res.status(400).send(errors);
+    };
+
+    try{
+        await movementsCollection.insertOne({
+            value: moviment.value,
+            description: moviment.description,
+            type: moviment.type,
+            date
+        })
+        res.sendStatus(201);
+    } catch (err) {
+        console.log(err)
+        res.sendStatus(500)
+    }
+
+});
 
 // app.put("/transactions", async (req, res) => {
 
