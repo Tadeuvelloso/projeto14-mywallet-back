@@ -12,7 +12,10 @@ const app = express();
 dotenv.config();
 app.use(cors());
 app.use(express.json());
-
+let db;
+let usersCollection;
+let movementsCollection;
+let sessionsCollection;
 
 // Schemas
 const transactionSchema = joi.object({
@@ -23,30 +26,32 @@ const transactionSchema = joi.object({
 
 const userSchema = joi.object({
     name: joi.string().min(3).max(100).required(),
-    email: joi.email().required(),
+    email: joi.string().email().required(),
     password: joi.string().required()
 });
 
 
 // MongoDB
-const MongoClient = new MongoClient(process.env.MONGO_URI);
+const mongoClient = new MongoClient(process.env.MONGO_URI);
 
 try {
-    await MongoClient.connect();
+    await mongoClient.connect();
     console.log("Mongo conectado!")
+    db = mongoClient.db("myWallet");
+    usersCollection = db.collection("users");
+    movementsCollection = db.collection("movement")
+    sessionsCollection = db.collection("sessions")
 } catch (err) {
     console.log(err)
 }
-const db = MongoClient.db("myWallet");
-const usersCollection = db.collection("users");
-const movementsCollection = db.collection("movement")
-const sessionsCollection = db.collection("sessions")
+
+
 
 //Routes
 
 app.post("/sign-up", async (req, res) => {
     const user = req.body;
-
+    console.log("passei!")
     try {
         const userExists = await usersCollection.findOne({ email: user.email })
 
@@ -73,22 +78,30 @@ app.post("/sign-up", async (req, res) => {
 })
 
 app.post("/sign-in", async (req, res) => {
-    const {email, password} = req.body;
-    const token = uuidV4();
+    const { email, password } = req.body;
 
+    const token = uuidV4();
+    
     try {
         const userExists = await usersCollection.findOne({ email });
-        if(!userExists){
+        if (!userExists) {
             return res.sendStatus(401);
         }
 
         const passwordValidation = bcrypt.compareSync(password, userExists.password);
 
-        if(!passwordValidation){
+        if (!passwordValidation) {
+            console.log("senha errada!");
             return res.sendStatus(401);
         }
 
-        await sessions.insertOne({userId: userExists._id, token})
+        const userSession = await sessionsCollection.findOne({ userId: userExists._id })
+
+        if(userSession){
+            return res.status(401).send("Você já esta logado!, saia para entrar novamente!")
+        }
+
+        await sessionsCollection.insertOne({ userId: userExists._id, token })
 
         res.send(token)
     } catch (err) {
@@ -97,31 +110,36 @@ app.post("/sign-in", async (req, res) => {
     }
 });
 
-// app.get("/transactions", async (req, res) => {
-//     const { authorization } = req.headers;
-//     const token = authorization?.replace('Bearer ', '');
-//     if(!token) {
-//         return res.sendStatus(401);
-//     }
-//     try {
-//         const sessions = await session.findOne({ token });
-//         console.log(sessions)
-//         const user = await usersCollection.findOne({ _id: sessions?.userId });
+app.get("/transactions", async (req, res) => {
+    const { authorization } = req.headers;
+
+    const token = authorization?.replace('Bearer ', '');
+
+    if(!token) {
+        return res.sendStatus(401);
+    }
+
+    try {
+        const session = await sessionsCollection.findOne({ token });
+       
+        const user = await usersCollection.findOne({ _id: session?.userId });
+
+        delete user.password;
         
-//         delete user.password;
-        
-//         res.send(user);
-//       } catch (err) {
-//         console.log(err);
-//         res.sendStatus(500);
-//       }
-// });
+        const userMoviments = movementsCollection.find();
 
- 
-
-app.post("/transactions", async (req, res) => {
-
+        res.send(userMoviments, user);
+      } catch (err) {
+        console.log(err);
+        res.sendStatus(500);
+      }
 });
+
+
+
+// app.post("/transactions", async (req, res) => {
+
+// });
 
 // app.put("/transactions", async (req, res) => {
 
