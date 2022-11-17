@@ -1,6 +1,6 @@
 import express from "express";
 import cors from "cors";
-import { MongoClient, ObjectId } from "mongodb";
+import { MongoClient, MongoServerClosedError, ObjectId } from "mongodb";
 import dotenv from "dotenv";
 import joi from "joi";
 import bcrypt from "bcrypt"
@@ -12,10 +12,7 @@ const app = express();
 dotenv.config();
 app.use(cors());
 app.use(express.json());
-let db;
-let usersCollection;
-let movementsCollection;
-let sessionsCollection;
+
 const now = dayjs();
 const date = now.format("DD/MM");
 
@@ -39,15 +36,15 @@ const mongoClient = new MongoClient(process.env.MONGO_URI);
 try {
     await mongoClient.connect();
     console.log("Mongo conectado!")
-    db = mongoClient.db("myWallet");
-    usersCollection = db.collection("users");
-    movementsCollection = db.collection("movement")
-    sessionsCollection = db.collection("sessions")
+    
 } catch (err) {
     console.log(err)
 }
 
-
+export const db = mongoClient.db("myWallet");
+export const usersCollection = db.collection("users");
+export const movementsCollection = db.collection("movement")
+export const sessionsCollection = db.collection("sessions")
 
 //Routes
 
@@ -148,7 +145,6 @@ app.get("/transactions", async (req, res) => {
       }
 });
 
-
 app.post("/transactions", async (req, res) => {
     const { authorization } = req.headers;
     const moviment = req.body;
@@ -189,29 +185,76 @@ app.post("/transactions", async (req, res) => {
     }
 });
 
+app.delete("/transactions/:id", async (req, res) => {
+    const { id } = req.params;
+    const { authorization } = req.headers;
 
-// app.put("/transactions", async (req, res) => {
-//     const { authorization } = req.headers;
-//     const newMoviment = req.body;
+    const token = authorization?.replace('Bearer ', '');
 
-//     const token = authorization?.replace('Bearer ', '');
+    if(!token) {
+        return res.sendStatus(401);
+    }
 
-//     if(!token) {
-//         return res.sendStatus(401);
-//     }
+    try{
+        await movementsCollection.deleteOne({_id: ObjectId(id)});
+        console.log("excluido!");
+        res.sendStatus(200);
+    } catch (err) {
+        console.log(err);
+        res.sendStatus(500);
+    }
 
-//     const { error } = userSchema.validate(newMoviment, { abortEarly: false });
+});
 
-//     if (error) {
-//         const errors = error.details.map(detail => detail.message);
-//         return res.status(400).send(errors);
-//     };
+app.put("/transactions/:id", async (req, res) => {
+    const { authorization } = req.headers;
+    const { id } = req.params;
+    const movimentAtt = req.body;
 
-// });
+    const token = authorization?.replace('Bearer ', '');
 
-// app.delete("/transactions", async (req, res) => {
+    if(!token) {
+        return res.sendStatus(401);
+    }
 
-// });
+    const { error } = transactionSchema.validate(movimentAtt, { abortEarly: false });
+
+    if (error) {
+        const errors = error.details.map(detail => detail.message);
+        return res.status(400).send(errors);
+    };
+
+    try{
+        const session = await sessionsCollection.findOne({token});
+
+        if(!session){
+            return res.sendStatus(401);
+        }
+        
+        const oldMovementation = await movementsCollection.findOne({_id: ObjectId(id)});
+
+        if(!oldMovementation){
+            return res.sendStatus(404);
+        }
+        
+        const newObj = {
+            value: movimentAtt.value,
+            description: movimentAtt.description,
+            userId: session.userId,
+            date
+        };
+
+        await movementsCollection.updateOne({_id: ObjectId(id)}, {$set: newObj})
+
+        res.sendStatus(200);
+    } catch (err) {
+        console.log(err);
+        res.sendStatus(500);
+    }
+
+});
+
+
 
 
 
