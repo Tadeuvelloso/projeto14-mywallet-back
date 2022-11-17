@@ -1,6 +1,6 @@
 import express from "express";
 import cors from "cors";
-import { MongoClient } from "mongodb";
+import { MongoClient, ObjectId } from "mongodb";
 import dotenv from "dotenv";
 import joi from "joi";
 import bcrypt from "bcrypt"
@@ -21,7 +21,7 @@ const date = now.format("DD/MM");
 
 // Schemas
 const transactionSchema = joi.object({
-    value: joi.number().min(1).required(),
+    value: joi.string().min(1).required(),
     description: joi.string().min(3).required(),
     type: joi.string().valid("positive", "negative").required()
 });
@@ -103,9 +103,12 @@ app.post("/sign-in", async (req, res) => {
             return res.status(401).send("Você já esta logado!, saia para entrar novamente!")
         }
 
-        await sessionsCollection.insertOne({ userId: userExists._id, token })
+        await sessionsCollection.insertOne({ userId: userExists._id, token });
+        const userData = await usersCollection.findOne({_id: ObjectId(userExists._id)})
 
-        res.send(token)
+        const objUser = { name: userData.name, token }
+
+        res.status(200).send(objUser);
     } catch (err) {
         console.log(err);
         res.sendStatus(500);
@@ -123,20 +126,27 @@ app.get("/transactions", async (req, res) => {
 
     try {
         const session = await sessionsCollection.findOne({ token });
-       
-        const user = await usersCollection.findOne({ _id: session?.userId });
-
-        delete user.password;
         
-        const userMoviments = movementsCollection.find();
+        if(!session){
+            return res.status(401).send("Token invalido!");
+        }
+        
+        const user = await usersCollection.findOne({ _id: session.userId });
 
-        res.send(userMoviments, user);
+        if(!user){
+            console.log("não achei")
+            return res.sendStatus(401);
+        }
+        
+        const usersMoviments = await movementsCollection.find({userId: user._id}).toArray();
+       
+        res.send(usersMoviments);
+        
       } catch (err) {
         console.log(err);
         res.sendStatus(500);
       }
 });
-
 
 
 app.post("/transactions", async (req, res) => {
@@ -149,7 +159,7 @@ app.post("/transactions", async (req, res) => {
         return res.sendStatus(401);
     }
 
-    const { error } = userSchema.validate(moviment, { abortEarly: false });
+    const { error } = transactionSchema.validate(moviment, { abortEarly: false });
 
     if (error) {
         const errors = error.details.map(detail => detail.message);
@@ -157,21 +167,45 @@ app.post("/transactions", async (req, res) => {
     };
 
     try{
+        console.log("passei aqui!")
+        const session = await sessionsCollection.findOne({ token });
+        console.log(session)
+    
+        if(!session){
+            return res.sendStatus(401);
+        }
+     
         await movementsCollection.insertOne({
             value: moviment.value,
             description: moviment.description,
             type: moviment.type,
+            userId: session.userId,
             date
         })
-        res.sendStatus(201);
+        res.status(201).send("Movimentação criada!");
     } catch (err) {
         console.log(err)
         res.sendStatus(500)
     }
-
 });
 
+
 // app.put("/transactions", async (req, res) => {
+//     const { authorization } = req.headers;
+//     const newMoviment = req.body;
+
+//     const token = authorization?.replace('Bearer ', '');
+
+//     if(!token) {
+//         return res.sendStatus(401);
+//     }
+
+//     const { error } = userSchema.validate(newMoviment, { abortEarly: false });
+
+//     if (error) {
+//         const errors = error.details.map(detail => detail.message);
+//         return res.status(400).send(errors);
+//     };
 
 // });
 
