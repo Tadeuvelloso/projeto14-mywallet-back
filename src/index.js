@@ -62,4 +62,6 @@ app.delete("/transactions/:id", deleteTransactions);
 
 app.put("/transactions/:id", putTransactions);
 
-app.listen(4000, () => { console.log("Running app in port: 4000!") });
+const port = process.env.PORT || 5000;
+
+app.listen(port, () => { console.log(`Running app in port: ${port}!`) });
