@@ -131,6 +131,7 @@ export async function putTransactions (req, res) {
             value: movimentAtt.value,
             description: movimentAtt.description,
             userId: session.userId,
+            type: movimentAtt.type,
             date
         };
 

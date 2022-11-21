@@ -18,7 +18,7 @@ export const date = now.format("DD/MM");
 
 // Schemas
 export const transactionSchema = joi.object({
-    value: joi.string().min(1).required(),
+    value: joi.number().min(1).required(),
     description: joi.string().min(3).required(),
     type: joi.string().valid("positive", "negative").required()
 });
